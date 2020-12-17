@@ -8,8 +8,13 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	atypes "github.com/ovrclk/akash/x/audit/types"
+	etypes "github.com/ovrclk/akash/x/escrow/types"
 	"github.com/ovrclk/akash/x/market/types"
 	ptypes "github.com/ovrclk/akash/x/provider/types"
+)
+
+const (
+	bidEscrowScope = "bid"
 )
 
 type msgServer struct {
@@ -18,7 +23,7 @@ type msgServer struct {
 
 // NewMsgServerImpl returns an implementation of the market MsgServer interface
 // for the provided Keeper.
-func NewMsgServerImpl(k Keepers) types.MsgServer {
+func NewServer(k Keepers) types.MsgServer {
 	return &msgServer{keepers: k}
 }
 
@@ -65,8 +70,18 @@ func (ms msgServer) CreateBid(goCtx context.Context, msg *types.MsgCreateBid) (*
 		return nil, types.ErrAttributeMismatch
 	}
 
-	if _, err := ms.keepers.Market.CreateBid(ctx, msg.Order, provider, msg.Price); err != nil {
+	bid, err := ms.keepers.Market.CreateBid(ctx, msg.Order, provider, msg.Price)
+	if err != nil {
 		return nil, err
+	}
+
+	// crate escrow account for this bid
+	// todo: check deposit
+	if err := ms.keepers.Escrow.AccountCreate(ctx, etypes.AccountID{
+		Scope: bidEscrowScope,
+		XID:   bid.ID().String(),
+	}, bid.ID().Owner, sdk.NewCoin("XXX", sdk.NewInt(0))); err != nil {
+		return &types.MsgCreateBidResponse{}, err
 	}
 
 	telemetry.IncrCounter(1.0, "akash.bids")
@@ -100,8 +115,8 @@ func (ms msgServer) CloseBid(goCtx context.Context, msg *types.MsgCloseBid) (*ty
 		return nil, types.ErrLeaseNotActive
 	}
 
-	if bid.State != types.BidMatched {
-		return nil, types.ErrBidNotMatched
+	if bid.State != types.BidActive {
+		return nil, types.ErrBidNotActive
 	}
 
 	ms.keepers.Market.OnBidClosed(ctx, bid)
@@ -113,8 +128,15 @@ func (ms msgServer) CloseBid(goCtx context.Context, msg *types.MsgCloseBid) (*ty
 	return &types.MsgCloseBidResponse{}, nil
 }
 
+func (ms msgServer) CreateLease(goCtx context.Context, msg *types.MsgCreateLease) (*types.MsgCreateLeaseResponse, error) {
+	// TODO
+	return &types.MsgCreateLeaseResponse{}, nil
+}
+
 func (ms msgServer) CloseOrder(goCtx context.Context, msg *types.MsgCloseOrder) (*types.MsgCloseOrderResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	// close payment
 
 	order, found := ms.keepers.Market.GetOrder(ctx, msg.OrderID)
 	if !found {

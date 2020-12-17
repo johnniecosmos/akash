@@ -2,22 +2,32 @@ package keeper
 
 import (
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	"github.com/ovrclk/akash/x/deployment/types"
+	etypes "github.com/ovrclk/akash/x/escrow/types"
 )
 
 // Keeper of the deployment store
 type Keeper struct {
-	skey sdk.StoreKey
-	cdc  codec.BinaryMarshaler
+	skey   sdk.StoreKey
+	cdc    codec.BinaryMarshaler
+	pspace paramtypes.Subspace
 }
 
 // NewKeeper creates and returns an instance for deployment keeper
-func NewKeeper(cdc codec.BinaryMarshaler, skey sdk.StoreKey) Keeper {
+func NewKeeper(cdc codec.BinaryMarshaler, skey sdk.StoreKey, pspace paramtypes.Subspace) Keeper {
+
+	if !pspace.HasKeyTable() {
+		pspace = pspace.WithKeyTable(types.ParamKeyTable())
+	}
+
 	return Keeper{
-		skey: skey,
-		cdc:  cdc,
+		skey:   skey,
+		cdc:    cdc,
+		pspace: pspace,
 	}
 }
 
@@ -96,19 +106,19 @@ func (k Keeper) Create(ctx sdk.Context, deployment types.Deployment, groups []ty
 	store.Set(key, k.cdc.MustMarshalBinaryBare(&deployment))
 
 	for _, group := range groups {
-		group := group
 		if !group.ID().DeploymentID().Equals(deployment.ID()) {
 			return types.ErrInvalidGroupID
 		}
 		gkey := groupKey(group.ID())
 		store.Set(gkey, k.cdc.MustMarshalBinaryBare(&group))
-		k.updateOpenGroupsIndex(ctx, group)
 	}
 
 	ctx.EventManager().EmitEvent(
 		types.NewEventDeploymentCreated(deployment.ID(), deployment.Version).
 			ToSDKEvent(),
 	)
+
+	telemetry.IncrCounter(1.0, "akash.deployment_created")
 
 	return nil
 }
@@ -204,7 +214,7 @@ func (k Keeper) WithOpenGroups(ctx sdk.Context, fn func(types.Group) bool) {
 // OnOrderCreated updates group state to group ordered
 func (k Keeper) OnOrderCreated(ctx sdk.Context, group types.Group) {
 	// TODO: assert state transition
-	group.State = types.GroupOrdered
+	group.State = types.GroupOpen
 	k.updateGroup(ctx, group)
 }
 
@@ -212,7 +222,7 @@ func (k Keeper) OnOrderCreated(ctx sdk.Context, group types.Group) {
 func (k Keeper) OnLeaseCreated(ctx sdk.Context, id types.GroupID) {
 	// TODO: assert state transition
 	group, _ := k.GetGroup(ctx, id)
-	group.State = types.GroupMatched
+	group.State = types.GroupOpen
 	k.updateGroup(ctx, group)
 }
 
@@ -253,6 +263,23 @@ func (k Keeper) OnDeploymentClosed(ctx sdk.Context, group types.Group) {
 		types.NewEventDeploymentClosed(group.ID().DeploymentID()).
 			ToSDKEvent(),
 	)
+}
+
+// GetParams returns the total set of deployment parameters.
+func (k Keeper) GetParams(ctx sdk.Context) (params types.Params) {
+	k.pspace.GetParamSet(ctx, &params)
+	return params
+}
+
+// SetParams sets the deployment parameters to the paramspace.
+func (k Keeper) SetParams(ctx sdk.Context, params types.Params) {
+	k.pspace.SetParamSet(ctx, &params)
+}
+
+func (k Keeper) OnEscrowAccountClosed(ctx sdk.Context, obj etypes.Account) {
+}
+
+func (k Keeper) OnEscrowPaymentClosed(ctx sdk.Context, obj etypes.Payment) {
 }
 
 func (k Keeper) updateGroup(ctx sdk.Context, group types.Group) {

@@ -3,7 +3,9 @@ package keeper
 import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	dtypes "github.com/ovrclk/akash/x/deployment/types"
+	etypes "github.com/ovrclk/akash/x/escrow/types"
 	"github.com/ovrclk/akash/x/market/types"
 	"github.com/pkg/errors"
 )
@@ -15,13 +17,23 @@ const (
 
 // Keeper of the market store
 type Keeper struct {
-	cdc  codec.BinaryMarshaler
-	skey sdk.StoreKey
+	cdc    codec.BinaryMarshaler
+	skey   sdk.StoreKey
+	pspace paramtypes.Subspace
 }
 
 // NewKeeper creates and returns an instance for Market keeper
-func NewKeeper(cdc codec.BinaryMarshaler, skey sdk.StoreKey) Keeper {
-	return Keeper{cdc: cdc, skey: skey}
+func NewKeeper(cdc codec.BinaryMarshaler, skey sdk.StoreKey, pspace paramtypes.Subspace) Keeper {
+
+	if !pspace.HasKeyTable() {
+		pspace = pspace.WithKeyTable(types.ParamKeyTable())
+	}
+
+	return Keeper{
+		skey:   skey,
+		cdc:    cdc,
+		pspace: pspace,
+	}
 }
 
 // Codec returns keeper codec
@@ -52,15 +64,14 @@ func (k Keeper) CreateOrder(ctx sdk.Context, gid dtypes.GroupID, spec dtypes.Gro
 		OrderID: types.MakeOrderID(gid, oseq),
 		Spec:    spec,
 		State:   types.OrderOpen,
-		StartAt: ctx.BlockHeight() + orderTTL,                         // TODO: check overflow
-		CloseAt: ctx.BlockHeight() + orderTTL + spec.OrderBidDuration, // TODO: check overflow, set via parameter
 	}
 
 	key := orderKey(order.ID())
-	// XXX TODO: check not overwrite
+
 	if store.Has(key) {
 		return types.Order{}, types.ErrOrderExists
 	}
+
 	store.Set(key, k.cdc.MustMarshalBinaryBare(&order))
 	k.updateOpenOrderIndex(store, order)
 
@@ -125,14 +136,14 @@ func (k Keeper) CreateLease(ctx sdk.Context, bid types.Bid) {
 // OnOrderMatched updates order state to matched
 func (k Keeper) OnOrderMatched(ctx sdk.Context, order types.Order) {
 	// TODO: assert state transition
-	order.State = types.OrderMatched
+	order.State = types.OrderActive
 	k.updateOrder(ctx, order)
 }
 
-// OnBidMatched updates bid state to matched
+// OnBidActive updates bid state to matched
 func (k Keeper) OnBidMatched(ctx sdk.Context, bid types.Bid) {
 	// TODO: assert state transition
-	bid.State = types.BidMatched
+	bid.State = types.BidActive
 	k.updateBid(ctx, bid)
 }
 
@@ -277,7 +288,7 @@ func (k Keeper) LeaseForOrder(ctx sdk.Context, oid types.OrderID) (types.Lease, 
 		if !item.ID().OrderID().Equals(oid) {
 			return false
 		}
-		if item.State != types.BidMatched {
+		if item.State != types.BidActive {
 			return false
 		}
 		value, found = k.GetLease(ctx, types.LeaseID(item.ID()))
@@ -396,6 +407,23 @@ func (k Keeper) WithBidsForOrder(ctx sdk.Context, id types.OrderID, fn func(type
 			break
 		}
 	}
+}
+
+// GetParams returns the total set of deployment parameters.
+func (k Keeper) GetParams(ctx sdk.Context) (params types.Params) {
+	k.pspace.GetParamSet(ctx, &params)
+	return params
+}
+
+// SetParams sets the deployment parameters to the paramspace.
+func (k Keeper) SetParams(ctx sdk.Context, params types.Params) {
+	k.pspace.SetParamSet(ctx, &params)
+}
+
+func (k Keeper) OnEscrowAccountClosed(ctx sdk.Context, obj etypes.Account) {
+}
+
+func (k Keeper) OnEscrowPaymentClosed(ctx sdk.Context, obj etypes.Payment) {
 }
 
 func (k Keeper) updateOrder(ctx sdk.Context, order types.Order) {
