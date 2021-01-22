@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,11 +15,14 @@ import (
 	"sync"
 	"time"
 
+	cutils "github.com/ovrclk/akash/x/cert/utils"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 
 	cosmosclient "github.com/cosmos/cosmos-sdk/client"
+
 	akashclient "github.com/ovrclk/akash/client"
 	"github.com/ovrclk/akash/manifest"
 	"github.com/ovrclk/akash/provider"
@@ -35,13 +37,24 @@ type Client interface {
 	Status(ctx context.Context) (*provider.Status, error)
 	SubmitManifest(ctx context.Context, dseq uint64, mani manifest.Manifest) error
 	LeaseStatus(ctx context.Context, id mtypes.LeaseID) (*cltypes.LeaseStatus, error)
+	LeaseEvents(ctx context.Context, id mtypes.LeaseID, follow bool) (*LeaseKubeEvents, error)
 	ServiceStatus(ctx context.Context, id mtypes.LeaseID, service string) (*cltypes.ServiceStatus, error)
 	ServiceLogs(ctx context.Context, id mtypes.LeaseID, service string, follow bool, tailLines int64) (*ServiceLogs, error)
+}
+
+type LeaseKubeEvent struct {
+	Action  string `json:"action"`
+	Message string `json:"message"`
 }
 
 type ServiceLogMessage struct {
 	Name    string `json:"name"`
 	Message string `json:"message"`
+}
+
+type LeaseKubeEvents struct {
+	Stream  <-chan cltypes.LeaseEvent
+	OnClose <-chan string
 }
 
 type ServiceLogs struct {
@@ -293,6 +306,103 @@ func (c *client) LeaseStatus(ctx context.Context, id mtypes.LeaseID) (*cltypes.L
 	return &obj, nil
 }
 
+func (c *client) LeaseEvents(ctx context.Context, id mtypes.LeaseID, follow bool) (*LeaseKubeEvents, error) {
+	endpoint, err := url.Parse(c.host.String() + "/" + leaseEventsPath(id))
+	if err != nil {
+		return nil, err
+	}
+
+	switch endpoint.Scheme {
+	case "wss", "https":
+		endpoint.Scheme = "wss"
+	default:
+		return nil, errors.Errorf("invalid uri scheme %q", endpoint.Scheme)
+	}
+
+	query := url.Values{}
+	query.Set("follow", strconv.FormatBool(follow))
+
+	endpoint.RawQuery = query.Encode()
+	conn, response, err := c.wsclient.DialContext(ctx, endpoint.String(), nil)
+	if err != nil {
+		if errors.Is(err, websocket.ErrBadHandshake) {
+			buf := &bytes.Buffer{}
+			_, _ = io.Copy(buf, response.Body)
+
+			return nil, ClientResponseError{
+				Status:  response.StatusCode,
+				Message: buf.String(),
+			}
+		}
+
+		return nil, err
+	}
+
+	streamch := make(chan cltypes.LeaseEvent)
+	onclose := make(chan string, 1)
+	logs := &LeaseKubeEvents{
+		Stream:  streamch,
+		OnClose: onclose,
+	}
+
+	processOnCloseErr := func(err error) {
+		if err != nil {
+			if _, ok := err.(*websocket.CloseError); ok {
+				onclose <- parseCloseMessage(err.Error())
+			} else {
+				onclose <- err.Error()
+			}
+		}
+	}
+
+	if err = conn.SetReadDeadline(time.Now().Add(pingWait)); err != nil {
+		processOnCloseErr(err)
+		return nil, err
+	}
+
+	conn.SetPingHandler(func(string) error {
+		err := conn.WriteControl(websocket.PongMessage, nil, time.Now().Add(time.Second))
+		if err != nil {
+			return err
+		}
+
+		return conn.SetReadDeadline(time.Now().Add(pingWait))
+	})
+
+	go func(conn *websocket.Conn) {
+		defer func() {
+			close(streamch)
+			close(onclose)
+			_ = conn.Close()
+		}()
+
+		for {
+			mType, msg, e := conn.ReadMessage()
+			if e != nil {
+				processOnCloseErr(e)
+				return
+			}
+
+			switch mType {
+			case websocket.TextMessage:
+				var evt cltypes.LeaseEvent
+				if e = json.Unmarshal(msg, &evt); e != nil {
+					onclose <- e.Error()
+					return
+				}
+
+				streamch <- evt
+			case websocket.CloseMessage:
+				onclose <- parseCloseMessage(string(msg))
+				return
+			default:
+			}
+		}
+	}(conn)
+
+	return logs, nil
+}
+
 func (c *client) ServiceStatus(ctx context.Context, id mtypes.LeaseID, service string) (*cltypes.ServiceStatus, error) {
 	uri, err := makeURI(c.host, serviceStatusPath(id, service))
 	if err != nil {
@@ -381,7 +491,6 @@ func (c *client) ServiceLogs(ctx context.Context,
 	query := url.Values{}
 
 	query.Set("follow", strconv.FormatBool(follow))
-	query.Set("tail", strconv.FormatInt(tailLines, 10))
 
 	endpoint.RawQuery = query.Encode()
 
@@ -407,6 +516,20 @@ func (c *client) ServiceLogs(ctx context.Context,
 		OnClose: onclose,
 	}
 
+	if err = conn.SetReadDeadline(time.Now().Add(pingWait)); err != nil {
+		onclose <- parseCloseMessage(err.Error())
+		return nil, err
+	}
+
+	conn.SetPingHandler(func(string) error {
+		err := conn.WriteControl(websocket.PongMessage, nil, time.Now().Add(time.Second))
+		if err != nil {
+			return err
+		}
+
+		return conn.SetReadDeadline(time.Now().Add(pingWait))
+	})
+
 	go func(conn *websocket.Conn) {
 		defer func() {
 			close(streamch)
@@ -415,12 +538,6 @@ func (c *client) ServiceLogs(ctx context.Context,
 		}()
 
 		for {
-			e := conn.SetReadDeadline(time.Now().Add(pingWait))
-			if e != nil {
-				onclose <- e.Error()
-				return
-			}
-
 			mType, msg, e := conn.ReadMessage()
 			if e != nil {
 				onclose <- parseCloseMessage(e.Error())

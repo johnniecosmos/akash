@@ -47,7 +47,7 @@ deployment-create:
 
 .PHONY: deployment-update
 deployment-update:
-	$(AKASHCTL) tx deployment update "$(KEY_OPTS)" "$(SDL_PATH)" -y \
+	$(AKASHCTL) tx deployment update "$(KEY_OPTS)" "$(CHAIN_OPTS)" "$(SDL_PATH)" -y \
 		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"			\
 		--chain-id "$(CHAIN_NAME)"

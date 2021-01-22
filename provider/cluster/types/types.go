@@ -2,7 +2,11 @@ package cluster
 
 import (
 	"bufio"
+	"context"
 	"io"
+	"time"
+
+	eventsv1 "k8s.io/api/events/v1"
 
 	"github.com/ovrclk/akash/manifest"
 	atypes "github.com/ovrclk/akash/types"
@@ -70,4 +74,71 @@ type ServiceLog struct {
 	Name    string
 	Stream  io.ReadCloser
 	Scanner *bufio.Scanner
+}
+
+type LeaseEventObject struct {
+	Kind      string `json:"kind" yaml:"kind"`
+	Namespace string `json:"namespace" yaml:"namespace"`
+	Name      string `json:"name" yaml:"name"`
+}
+
+type LeaseEvent struct {
+	Type                string           `json:"type" yaml:"type"`
+	ReportingController string           `json:"reportingController,omitempty" yaml:"reportingController"`
+	ReportingInstance   string           `json:"reportingInstance,omitempty" yaml:"reportingInstance"`
+	Time                time.Time        `json:"time" yaml:"time"`
+	Reason              string           `json:"reason" yaml:"reason"`
+	Object              LeaseEventObject `json:"object" yaml:"object"`
+}
+
+// EventsWatcher
+type EventsWatcher interface {
+	Stop()
+	ResultChan() <-chan *eventsv1.Event
+}
+
+// EventsFeed
+type EventsFeed struct {
+	ctx    context.Context
+	cancel func()
+	quit   chan struct{}
+	feed   chan *eventsv1.Event
+}
+
+var _ EventsWatcher = (*EventsFeed)(nil)
+
+func NewEventsFeed(ctx context.Context) *EventsFeed {
+	ctx, cancel := context.WithCancel(ctx)
+	return &EventsFeed{
+		ctx:    ctx,
+		cancel: cancel,
+		quit:   make(chan struct{}),
+		feed:   make(chan *eventsv1.Event),
+	}
+}
+
+func (e *EventsFeed) Stop() {
+	e.cancel()
+}
+
+func (e *EventsFeed) Shutdown() {
+	e.Stop()
+	select {
+	case <-e.quit:
+	default:
+		close(e.quit)
+		close(e.feed)
+	}
+}
+
+func (e *EventsFeed) Done() <-chan struct{} {
+	return e.ctx.Done()
+}
+
+func (e *EventsFeed) NomNom() chan<- *eventsv1.Event {
+	return e.feed
+}
+
+func (e *EventsFeed) ResultChan() <-chan *eventsv1.Event {
+	return e.feed
 }
