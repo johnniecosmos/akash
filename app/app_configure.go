@@ -48,6 +48,7 @@ func (app *AkashApp) setAkashKeepers() {
 	app.keeper.escrow = ekeeper.NewKeeper(
 		app.appCodec,
 		app.keys[escrow.StoreKey],
+		app.keeper.bank,
 	)
 
 	app.keeper.deployment = deployment.NewKeeper(
