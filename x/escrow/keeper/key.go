@@ -22,6 +22,18 @@ func accountKey(id types.AccountID) []byte {
 	return buf.Bytes()
 }
 
+func accountPaymentsKey(id types.AccountID) []byte {
+	// TODO: validate scope, xid, pid
+	buf := bytes.Buffer{}
+	buf.Write(paymentKeyPrefix)
+	buf.WriteRune('/')
+	buf.WriteString(id.Scope)
+	buf.WriteRune('/')
+	buf.WriteString(id.XID)
+	buf.WriteRune('/')
+	return buf.Bytes()
+}
+
 func paymentKey(id types.AccountID, pid string) []byte {
 	// TODO: validate scope, xid, pid
 	buf := bytes.Buffer{}
