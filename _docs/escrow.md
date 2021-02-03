@@ -76,7 +76,7 @@ SettlePayments(d Deposit, height uint, charges []Payment)
   totalTransfer  := blockRate * heightDelta
 
   // remaining balance in account
-  accountBalance := d.Balance - d.Transferred
+  accountBalance := d.Balance
 
   // number of full blocks that can be paid for
   numFullBlocks  := MIN(accountBalance DIV blockRate,heightDelta)
@@ -88,6 +88,7 @@ SettlePayments(d Deposit, height uint, charges []Payment)
   // not overdrawn (fully paid)
   if numFullBlocks == heightDelta
     d.SettledAt    = height
+    d.Balance     -= totalTransfer
     d.Transferred += totalTransfer
     return
 
@@ -96,7 +97,7 @@ SettlePayments(d Deposit, height uint, charges []Payment)
 
   // distribute, balance, weighted by transfer amount.
   for p := range payments
-    amount    := (p.Price / blockRate) * remainingAmount
+    amount    := (p.Rate / blockRate) * remainingAmount
     p.Balance += amount
     p.State    = OVERDRAWN
 
