@@ -5,9 +5,11 @@ import (
 )
 
 const (
-	MsgTypeCreateBid  = "create-bid"
-	MsgTypeCloseBid   = "close-bid"
-	MsgTypeCloseOrder = "close-order"
+	MsgTypeCreateBid   = "create-bid"
+	MsgTypeWithdrawBid = "withdraw-bid"
+	MsgTypeCreateLease = "create-lease"
+	MsgTypeCloseBid    = "close-bid"
+	MsgTypeCloseOrder  = "close-order"
 )
 
 var (
@@ -65,6 +67,75 @@ func (msg MsgCreateBid) ValidateBasic() error {
 	}
 
 	return nil
+}
+
+// NewMsgWithdrawBid creates a new MsgWithdrawBid instance
+func NewMsgWithdrawBid(id BidID) *MsgWithdrawBid {
+	return &MsgWithdrawBid{
+		BidID: id,
+	}
+}
+
+// Route implements the sdk.Msg interface
+func (msg MsgWithdrawBid) Route() string { return RouterKey }
+
+// Type implements the sdk.Msg interface
+func (msg MsgWithdrawBid) Type() string { return MsgTypeWithdrawBid }
+
+// GetSignBytes encodes the message for signing
+func (msg MsgWithdrawBid) GetSignBytes() []byte {
+	return sdk.MustSortJSON(ModuleCdc.MustMarshalJSON(&msg))
+}
+
+// GetSigners defines whose signature is required
+func (msg MsgWithdrawBid) GetSigners() []sdk.AccAddress {
+	provider, err := sdk.AccAddressFromBech32(msg.GetBidID().Provider)
+	if err != nil {
+		panic(err)
+	}
+
+	return []sdk.AccAddress{provider}
+}
+
+// ValidateBasic does basic validation of provider and order
+func (msg MsgWithdrawBid) ValidateBasic() error {
+	if err := msg.BidID.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// NewMsgCreateLease creates a new MsgCreateLease instance
+func NewMsgCreateLease(id BidID) *MsgCreateLease {
+	return &MsgCreateLease{
+		BidID: id,
+	}
+}
+
+// Route implements the sdk.Msg interface
+func (msg MsgCreateLease) Route() string { return RouterKey }
+
+// Type implements the sdk.Msg interface
+func (msg MsgCreateLease) Type() string { return MsgTypeCreateLease }
+
+// GetSignBytes encodes the message for signing
+func (msg MsgCreateLease) GetSignBytes() []byte {
+	return sdk.MustSortJSON(ModuleCdc.MustMarshalJSON(&msg))
+}
+
+// GetSigners defines whose signature is required
+func (msg MsgCreateLease) GetSigners() []sdk.AccAddress {
+	provider, err := sdk.AccAddressFromBech32(msg.BidID.Provider)
+	if err != nil {
+		panic(err)
+	}
+
+	return []sdk.AccAddress{provider}
+}
+
+// ValidateBasic method for MsgCreateLease
+func (msg MsgCreateLease) ValidateBasic() error {
+	return msg.BidID.Validate()
 }
 
 // NewMsgCloseBid creates a new MsgCloseBid instance

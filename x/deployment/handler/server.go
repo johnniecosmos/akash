@@ -10,7 +10,6 @@ import (
 	"github.com/ovrclk/akash/x/deployment/keeper"
 	"github.com/ovrclk/akash/x/deployment/types"
 	ekeeper "github.com/ovrclk/akash/x/escrow/keeper"
-	etypes "github.com/ovrclk/akash/x/escrow/types"
 )
 
 var _ types.MsgServer = msgServer{}
@@ -82,10 +81,11 @@ func (ms msgServer) CreateDeployment(goCtx context.Context, msg *types.MsgCreate
 		return &types.MsgCreateDeploymentResponse{}, err
 	}
 
-	if err := ms.escrow.AccountCreate(ctx, etypes.AccountID{
-		Scope: deploymentEscrowScope,
-		XID:   deployment.ID().String(),
-	}, owner, msg.Deposit); err != nil {
+	if err := ms.escrow.AccountCreate(ctx,
+		types.EscrowAccountForDeployment(deployment.ID()),
+		owner,
+		msg.Deposit,
+	); err != nil {
 		return &types.MsgCreateDeploymentResponse{}, err
 	}
 
@@ -94,10 +94,9 @@ func (ms msgServer) CreateDeployment(goCtx context.Context, msg *types.MsgCreate
 
 func (ms msgServer) DepositDeployment(goCtx context.Context, msg *types.MsgDepositDeployment) (*types.MsgDepositDeploymentResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	if err := ms.escrow.AccountDeposit(ctx, etypes.AccountID{
-		Scope: deploymentEscrowScope,
-		XID:   msg.ID.String(),
-	}, msg.Amount); err != nil {
+	if err := ms.escrow.AccountDeposit(ctx,
+		types.EscrowAccountForDeployment(msg.ID),
+		msg.Amount); err != nil {
 		return &types.MsgDepositDeploymentResponse{}, err
 	}
 	return &types.MsgDepositDeploymentResponse{}, nil
@@ -134,10 +133,9 @@ func (ms msgServer) CloseDeployment(goCtx context.Context, msg *types.MsgCloseDe
 		return nil, types.ErrDeploymentClosed
 	}
 
-	if err := ms.escrow.AccountClose(ctx, etypes.AccountID{
-		Scope: deploymentEscrowScope,
-		XID:   deployment.ID().String(),
-	}); err != nil {
+	if err := ms.escrow.AccountClose(ctx,
+		types.EscrowAccountForDeployment(deployment.ID()),
+	); err != nil {
 		return &types.MsgCloseDeploymentResponse{}, err
 	}
 

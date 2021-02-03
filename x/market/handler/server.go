@@ -8,6 +8,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	atypes "github.com/ovrclk/akash/x/audit/types"
+	dtypes "github.com/ovrclk/akash/x/deployment/types"
 	etypes "github.com/ovrclk/akash/x/escrow/types"
 	"github.com/ovrclk/akash/x/market/types"
 	ptypes "github.com/ovrclk/akash/x/provider/types"
@@ -83,8 +84,7 @@ func (ms msgServer) CreateBid(goCtx context.Context, msg *types.MsgCreateBid) (*
 		return nil, err
 	}
 
-	// crate escrow account for this bid
-	// todo: check deposit
+	// create escrow account for this bid
 	if err := ms.keepers.Escrow.AccountCreate(ctx, etypes.AccountID{
 		Scope: bidEscrowScope,
 		XID:   bid.ID().String(),
@@ -143,6 +143,11 @@ func (ms msgServer) WithdrawBid(goCtx context.Context, msg *types.MsgWithdrawBid
 	if !found {
 		return nil, types.ErrUnknownBid
 	}
+
+	ms.keepers.Escrow.PaymentWithdraw(ctx,
+		dtypes.EscrowAccountForDeployment(msg.BidID.DeploymentID()),
+		"foo",
+	)
 	return &types.MsgWithdrawBidResponse{}, nil
 }
 

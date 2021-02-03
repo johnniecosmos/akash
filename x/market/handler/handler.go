@@ -21,6 +21,14 @@ func NewHandler(keepers Keepers) sdk.Handler {
 			res, err := ms.CloseBid(sdk.WrapSDKContext(ctx), msg)
 			return sdk.WrapServiceResult(ctx, res, err)
 
+		case *types.MsgWithdrawBid:
+			res, err := ms.WithdrawBid(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
+
+		case *types.MsgCreateLease:
+			res, err := ms.CreateLease(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
+
 		case *types.MsgCloseOrder:
 			res, err := ms.CloseOrder(sdk.WrapSDKContext(ctx), msg)
 			return sdk.WrapServiceResult(ctx, res, err)
