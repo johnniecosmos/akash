@@ -61,6 +61,6 @@ var (
 	// ErrGroupSpecInvalid indicates a GroupSpec has invalid configuration
 	ErrGroupSpecInvalid = sdkerrors.Register(ModuleName, errGroupSpec, "GroupSpec invalid")
 
-	// ErrInvalidDeposit indicates a GroupSpec has invalid configuration
-	ErrInvalidDeposit = sdkerrors.Register(ModuleName, errGroupSpec, "Deposit invalid")
+	// ErrInvalidDeposit indicates an invalid deposit
+	ErrInvalidDeposit = sdkerrors.Register(ModuleName, errInvalidDeposit, "Deposit invalid")
 )

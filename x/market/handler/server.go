@@ -32,6 +32,14 @@ var _ types.MsgServer = msgServer{}
 func (ms msgServer) CreateBid(goCtx context.Context, msg *types.MsgCreateBid) (*types.MsgCreateBidResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
+	minDeposit := ms.keepers.Market.GetParams(ctx).BidMinDeposit
+	if msg.Deposit.Denom != minDeposit.Denom {
+		return nil, types.ErrInvalidDeposit
+	}
+	if minDeposit.Amount.GT(msg.Deposit.Amount) {
+		return nil, types.ErrInvalidDeposit
+	}
+
 	order, found := ms.keepers.Market.GetOrder(ctx, msg.Order)
 	if !found {
 		return nil, types.ErrInvalidOrder
@@ -75,17 +83,12 @@ func (ms msgServer) CreateBid(goCtx context.Context, msg *types.MsgCreateBid) (*
 		return nil, err
 	}
 
-	owner, err := sdk.AccAddressFromBech32(bid.ID().Owner)
-	if err != nil {
-		return nil, err
-	}
-
 	// crate escrow account for this bid
 	// todo: check deposit
 	if err := ms.keepers.Escrow.AccountCreate(ctx, etypes.AccountID{
 		Scope: bidEscrowScope,
 		XID:   bid.ID().String(),
-	}, owner, sdk.NewCoin("XXX", sdk.NewInt(0))); err != nil {
+	}, provider, msg.Deposit); err != nil {
 		return &types.MsgCreateBidResponse{}, err
 	}
 
@@ -131,6 +134,16 @@ func (ms msgServer) CloseBid(goCtx context.Context, msg *types.MsgCloseBid) (*ty
 	telemetry.IncrCounter(1.0, "akash.order_closed")
 
 	return &types.MsgCloseBidResponse{}, nil
+}
+
+func (ms msgServer) WithdrawBid(goCtx context.Context, msg *types.MsgWithdrawBid) (*types.MsgWithdrawBidResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	_, found := ms.keepers.Market.GetBid(ctx, msg.BidID)
+	if !found {
+		return nil, types.ErrUnknownBid
+	}
+	return &types.MsgWithdrawBidResponse{}, nil
 }
 
 func (ms msgServer) CreateLease(goCtx context.Context, msg *types.MsgCreateLease) (*types.MsgCreateLeaseResponse, error) {

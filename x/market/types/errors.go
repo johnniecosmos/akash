@@ -28,6 +28,7 @@ const (
 	errCodeOrderExists
 	errCodeOrderDurationExceeded
 	errCodeOrderTooEarly
+	errInvalidDeposit
 )
 
 var (
@@ -77,4 +78,7 @@ var (
 	ErrOrderTooEarly = sdkerrors.New(ModuleName, errCodeOrderTooEarly, "order: chain height to low for bidding")
 	// ErrOrderDurationExceeded order should be closed
 	ErrOrderDurationExceeded = sdkerrors.New(ModuleName, errCodeOrderDurationExceeded, "order duration has exceeded the bidding duration")
+
+	// ErrInvalidDeposit indicates an invalid deposit
+	ErrInvalidDeposit = sdkerrors.Register(ModuleName, errInvalidDeposit, "Deposit invalid")
 )

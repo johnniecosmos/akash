@@ -15,6 +15,8 @@ service Msg {
   // CloseBid defines a method to close a bid given proper inputs.
   rpc CloseBid(MsgCloseBid) returns (MsgCloseBidResponse);
 
+  rpc WithdrawBid(MsgWithdrawBid) returns (MsgWithdrawBidResponse);
+
   rpc CreateLease(MsgCreateLease) returns (MsgCreateLeaseResponse);
 
   // CloseOrder defines a method to close an order given proper inputs.
@@ -34,6 +36,9 @@ message MsgCreateBid {
   string                   provider = 2 [(gogoproto.jsontag) = "provider", (gogoproto.moretags) = "yaml:\"provider\""];
   cosmos.base.v1beta1.Coin price    = 3
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "price", (gogoproto.moretags) = "yaml:\"price\""];
+
+  cosmos.base.v1beta1.Coin deposit = 4
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "deposit", (gogoproto.moretags) = "yaml:\"deposit\""];
 }
 
 // MsgCreateBidResponse defines the Msg/CreateBid response type.
@@ -53,6 +58,21 @@ message MsgCloseBid {
 
 // MsgCloseBidResponse defines the Msg/CloseBid response type.
 message MsgCloseBidResponse {}
+
+// MsgWithdrawBid defines an SDK message for closing bid
+message MsgWithdrawBid {
+  option (gogoproto.equal) = false;
+
+  BidID bid_id = 1 [
+    (gogoproto.customname) = "BidID",
+    (gogoproto.nullable)   = false,
+    (gogoproto.jsontag)    = "id",
+    (gogoproto.moretags)   = "yaml:\"id\""
+  ];
+}
+
+// MsgWithdrawBidResponse defines the Msg/WithdrawBid response type.
+message MsgWithdrawBidResponse {}
 
 message MsgCreateLease {
   option (gogoproto.equal) = false;
