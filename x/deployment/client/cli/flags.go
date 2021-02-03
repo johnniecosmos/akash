@@ -18,6 +18,22 @@ func AddDeploymentIDFlags(flags *pflag.FlagSet) {
 	flags.Uint64("dseq", 0, "Deployment Sequence")
 }
 
+func AddDepositFlags(flags *pflag.FlagSet) {
+	flags.String("deposit", "", "Deposit amount")
+}
+
+func DepositFromFlags(flags *pflag.FlagSet) (sdk.Coin, error) {
+	val, err := flags.GetString("deposit")
+	if err != nil {
+		return sdk.Coin{}, err
+	}
+	return sdk.ParseCoinNormalized(val)
+}
+
+func MarkReqDepositFlags(cmd *cobra.Command) {
+	_ = cmd.MarkFlagRequired("deposit")
+}
+
 // MarkReqDeploymentIDFlags marks flags required for deployment
 func MarkReqDeploymentIDFlags(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("owner")
