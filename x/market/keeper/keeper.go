@@ -99,7 +99,6 @@ func (k Keeper) CreateBid(ctx sdk.Context, oid types.OrderID, provider sdk.AccAd
 		return types.Bid{}, types.ErrBidExists
 	}
 
-	// XXX TODO: check not overwrite
 	store.Set(key, k.cdc.MustMarshalBinaryBare(&bid))
 
 	ctx.EventManager().EmitEvent(

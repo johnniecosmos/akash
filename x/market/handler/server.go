@@ -144,15 +144,63 @@ func (ms msgServer) WithdrawBid(goCtx context.Context, msg *types.MsgWithdrawBid
 		return nil, types.ErrUnknownBid
 	}
 
-	ms.keepers.Escrow.PaymentWithdraw(ctx,
+	if err := ms.keepers.Escrow.PaymentWithdraw(ctx,
 		dtypes.EscrowAccountForDeployment(msg.BidID.DeploymentID()),
-		"foo",
-	)
+		types.EscrowPaymentForBid(msg.BidID),
+	); err != nil {
+		return &types.MsgWithdrawBidResponse{}, err
+	}
+
 	return &types.MsgWithdrawBidResponse{}, nil
 }
 
 func (ms msgServer) CreateLease(goCtx context.Context, msg *types.MsgCreateLease) (*types.MsgCreateLeaseResponse, error) {
-	// TODO
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	bid, found := ms.keepers.Market.GetBid(ctx, msg.BidID)
+	if !found {
+		return &types.MsgCreateLeaseResponse{}, types.ErrBidNotFound
+	}
+
+	if bid.State != types.BidOpen {
+		// TODO: BidNotOpen
+		return &types.MsgCreateLeaseResponse{}, types.ErrBidNotActive
+	}
+
+	order, found := ms.keepers.Market.GetOrder(ctx, msg.BidID.OrderID())
+	if !found {
+		return &types.MsgCreateLeaseResponse{}, types.ErrOrderNotFound
+	}
+
+	if order.State != types.OrderOpen {
+		// TODO: OrderNotOpen
+		return &types.MsgCreateLeaseResponse{}, types.ErrOrderNotFound
+	}
+
+	_, found = ms.keepers.Deployment.GetGroup(ctx, order.ID().GroupID())
+	if !found {
+		// TODO: not found
+		return &types.MsgCreateLeaseResponse{}, types.ErrOrderNotFound
+	}
+
+	// check group state.
+	// check deployment state.
+
+	owner, err := sdk.AccAddressFromBech32(msg.BidID.Provider)
+	if err != nil {
+		return &types.MsgCreateLeaseResponse{}, err
+	}
+
+	if err := ms.keepers.Escrow.PaymentCreate(ctx,
+		dtypes.EscrowAccountForDeployment(msg.BidID.DeploymentID()),
+		types.EscrowPaymentForBid(msg.BidID),
+		owner,
+		bid.Price); err != nil {
+		return &types.MsgCreateLeaseResponse{}, err
+	}
+
+	ms.keepers.Market.CreateLease(ctx, bid)
+
 	return &types.MsgCreateLeaseResponse{}, nil
 }
 
