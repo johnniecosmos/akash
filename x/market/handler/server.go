@@ -209,14 +209,27 @@ func (ms msgServer) CloseOrder(goCtx context.Context, msg *types.MsgCloseOrder) 
 		return nil, types.ErrUnknownOrder
 	}
 
-	lease, found := ms.keepers.Market.LeaseForOrder(ctx, order.ID())
-	if !found {
-		return nil, types.ErrNoLeaseForOrder
+	if order.State != types.OrderActive {
+		return &types.MsgCloseOrderResponse{}, types.ErrOrderClosed
 	}
 
-	ms.keepers.Market.OnOrderClosed(ctx, order)
-	ms.keepers.Market.OnLeaseClosed(ctx, lease)
-	ms.keepers.Deployment.OnOrderClosed(ctx, order.ID().GroupID())
+	lease, found := ms.keepers.Market.LeaseForOrder(ctx, order.ID())
+	if !found {
+		return &types.MsgCloseOrderResponse{}, types.ErrNoLeaseForOrder
+	}
+
+	if err := ms.keepers.Escrow.PaymentClose(ctx,
+		dtypes.EscrowAccountForDeployment(lease.ID().DeploymentID()),
+		types.EscrowPaymentForBid(lease.ID().BidID()),
+	); err != nil {
+		return &types.MsgCloseOrderResponse{}, err
+	}
+
+	// closed by handlers.
+
+	// ms.keepers.Market.OnOrderClosed(ctx, order)
+	// ms.keepers.Market.OnLeaseClosed(ctx, lease)
+	// ms.keepers.Deployment.OnOrderClosed(ctx, order.ID().GroupID())
 
 	return &types.MsgCloseOrderResponse{}, nil
 }
