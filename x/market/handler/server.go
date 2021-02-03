@@ -75,12 +75,17 @@ func (ms msgServer) CreateBid(goCtx context.Context, msg *types.MsgCreateBid) (*
 		return nil, err
 	}
 
+	owner, err := sdk.AccAddressFromBech32(bid.ID().Owner)
+	if err != nil {
+		return nil, err
+	}
+
 	// crate escrow account for this bid
 	// todo: check deposit
 	if err := ms.keepers.Escrow.AccountCreate(ctx, etypes.AccountID{
 		Scope: bidEscrowScope,
 		XID:   bid.ID().String(),
-	}, bid.ID().Owner, sdk.NewCoin("XXX", sdk.NewInt(0))); err != nil {
+	}, owner, sdk.NewCoin("XXX", sdk.NewInt(0))); err != nil {
 		return &types.MsgCreateBidResponse{}, err
 	}
 

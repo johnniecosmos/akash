@@ -36,6 +36,15 @@ func (ms msgServer) CreateDeployment(goCtx context.Context, msg *types.MsgCreate
 		return nil, types.ErrDeploymentExists
 	}
 
+	minDeposit := ms.deployment.GetParams(ctx).DeploymentMinDeposit
+
+	if minDeposit.Denom != msg.Deposit.Denom {
+		return nil, types.ErrInvalidDeposit
+	}
+	if minDeposit.Amount.GT(msg.Deposit.Amount) {
+		return nil, types.ErrInvalidDeposit
+	}
+
 	deployment := types.Deployment{
 		DeploymentID: msg.ID,
 		State:        types.DeploymentActive,
@@ -68,16 +77,30 @@ func (ms msgServer) CreateDeployment(goCtx context.Context, msg *types.MsgCreate
 		}
 	}
 
-	// todo: deposit
+	owner, err := sdk.AccAddressFromBech32(deployment.ID().Owner)
+	if err != nil {
+		return &types.MsgCreateDeploymentResponse{}, err
+	}
 
 	if err := ms.escrow.AccountCreate(ctx, etypes.AccountID{
 		Scope: deploymentEscrowScope,
 		XID:   deployment.ID().String(),
-	}, deployment.ID().Owner, sdk.NewCoin("XXX", sdk.NewInt(0))); err != nil {
+	}, owner, msg.Deposit); err != nil {
 		return &types.MsgCreateDeploymentResponse{}, err
 	}
 
 	return &types.MsgCreateDeploymentResponse{}, nil
+}
+
+func (ms msgServer) DepositDeployment(goCtx context.Context, msg *types.MsgDepositDeployment) (*types.MsgDepositDeploymentResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if err := ms.escrow.AccountDeposit(ctx, etypes.AccountID{
+		Scope: deploymentEscrowScope,
+		XID:   msg.ID.String(),
+	}, msg.Amount); err != nil {
+		return &types.MsgDepositDeploymentResponse{}, err
+	}
+	return &types.MsgDepositDeploymentResponse{}, nil
 }
 
 func (ms msgServer) UpdateDeployment(goCtx context.Context, msg *types.MsgUpdateDeployment) (*types.MsgUpdateDeploymentResponse, error) {
@@ -145,4 +168,12 @@ func (ms msgServer) CloseGroup(goCtx context.Context, msg *types.MsgCloseGroup) 
 	ms.market.OnGroupClosed(ctx, group.ID())
 
 	return &types.MsgCloseGroupResponse{}, nil
+}
+
+func (ms msgServer) PauseGroup(goCtx context.Context, msg *types.MsgPauseGroup) (*types.MsgPauseGroupResponse, error) {
+	return &types.MsgPauseGroupResponse{}, nil
+}
+
+func (ms msgServer) StartGroup(goCtx context.Context, msg *types.MsgStartGroup) (*types.MsgStartGroupResponse, error) {
+	return &types.MsgStartGroupResponse{}, nil
 }
