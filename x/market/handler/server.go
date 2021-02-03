@@ -9,13 +9,8 @@ import (
 
 	atypes "github.com/ovrclk/akash/x/audit/types"
 	dtypes "github.com/ovrclk/akash/x/deployment/types"
-	etypes "github.com/ovrclk/akash/x/escrow/types"
 	"github.com/ovrclk/akash/x/market/types"
 	ptypes "github.com/ovrclk/akash/x/provider/types"
-)
-
-const (
-	bidEscrowScope = "bid"
 )
 
 type msgServer struct {
@@ -85,10 +80,10 @@ func (ms msgServer) CreateBid(goCtx context.Context, msg *types.MsgCreateBid) (*
 	}
 
 	// create escrow account for this bid
-	if err := ms.keepers.Escrow.AccountCreate(ctx, etypes.AccountID{
-		Scope: bidEscrowScope,
-		XID:   bid.ID().String(),
-	}, provider, msg.Deposit); err != nil {
+	if err := ms.keepers.Escrow.AccountCreate(ctx,
+		types.EscrowAccountForBid(bid.ID()),
+		provider,
+		msg.Deposit); err != nil {
 		return &types.MsgCreateBidResponse{}, err
 	}
 
